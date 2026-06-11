@@ -1,11 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Assignments — SJEC Tasks{% endblock %}
+{% block title %}Assignments - Gara{% endblock %}
 {% block content %}
 
 <div class="page-header">
   <h1>Assignments</h1>
   <p>All assignments across your enrolled subjects.</p>
 </div>
+
+<form method="GET" class="card" style="margin-bottom:1rem;display:grid;grid-template-columns:1fr 180px auto;gap:0.75rem;align-items:end">
+  <div class="form-group" style="margin-bottom:0">
+    <label for="q">Search assignments</label>
+    <input type="text" id="q" name="q" value="{{ search }}" placeholder="Title, subject, code, description">
+  </div>
+  <div class="form-group" style="margin-bottom:0">
+    <label for="sort">Sort by</label>
+    <select id="sort" name="sort">
+      <option value="deadline" {% if sort_by == 'deadline' %}selected{% endif %}>Nearest deadline</option>
+      <option value="priority" {% if sort_by == 'priority' %}selected{% endif %}>Priority</option>
+      <option value="subject" {% if sort_by == 'subject' %}selected{% endif %}>Subject</option>
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">Apply</button>
+</form>
 
 {% if assignments %}
 <div style="display:flex;flex-direction:column;gap:1rem">
@@ -27,6 +43,13 @@
             <span class="badge badge-red">overdue</span>
           {% else %}
             <span class="badge badge-gray">pending</span>
+          {% endif %}
+          {% if not a.submission_id %}
+            {% if a.priority_rank == 0 %}
+              <span class="badge badge-red">high priority</span>
+            {% elif a.priority_rank == 1 %}
+              <span class="badge badge-yellow">due soon</span>
+            {% endif %}
           {% endif %}
         </div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:0.5rem">
@@ -55,6 +78,15 @@
 
       <!-- Submit form -->
       <div style="min-width:220px">
+        {% if a.submission_id %}
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:0.35rem">Submission</div>
+          <code>{{ a.file_url or 'No file URL provided' }}</code>
+          <div style="font-size:12px;color:var(--muted);margin-top:0.6rem">
+            Submitted work can only be modified by a teacher.
+          </div>
+        </div>
+        {% else %}
         <form method="POST" action="{{ url_for('submit_assignment', aid=a.assignment_id) }}">
           <div class="form-group" style="margin-bottom:0.5rem">
             <label>File URL / path</label>
@@ -63,9 +95,10 @@
                    value="{{ a.file_url if a.file_url else '' }}">
           </div>
           <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
-            {{ 'Update submission' if a.submission_id else 'Submit' }}
+            Submit
           </button>
         </form>
+        {% endif %}
       </div>
     </div>
   </div>

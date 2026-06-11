@@ -1,92 +1,85 @@
-# SJEC Academic Task Manager — Flask Web App
+# SJEC Academic Task Manager - Flask Web App
 
-## Project structure
+## Project Structure
 
-```
-app/
-├── app.py               # All Flask routes
+```text
+.
+├── Backend/
+│   ├── app.py
+│   └── sql_main.sql
+├── Frontend/
+│   └── *.html
+├── Dockerfile
+├── docker-compose.yml
 ├── requirements.txt
-├── README.md
-└── templates/
-    ├── base.html                  # Shared layout + nav
-    ├── login.html
-    ├── student_dashboard.html
-    ├── faculty_dashboard.html
-    ├── assignments.html
-    ├── projects.html
-    ├── grades.html
-    ├── faculty_subjects.html
-    ├── faculty_subject_detail.html
-    ├── create_assignment.html
-    ├── create_project.html
-    └── grade_submission.html
+└── README.md
 ```
 
-## Prerequisites
+## Run With Docker
 
-- Python 3.10+
-- PostgreSQL running locally
-- The database schema loaded (`01_schema.sql` + `05_seed.sql`)
-
-## Setup
+Prerequisite: Docker Desktop or Docker Engine with Docker Compose.
 
 ```bash
-# 1. Create a virtual environment
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Create the database
-createdb academic_db
-psql -U postgres -d academic_db -f ../db/01_schema.sql
-psql -U postgres -d academic_db -f ../db/05_seed.sql
-```
-
-## Configuration
-
-Set environment variables before running (or create a `.env` file):
-
-```bash
-export DB_HOST=localhost
-export DB_NAME=academic_db
-export DB_USER=postgres
-export DB_PASSWORD=yourpassword
-export SECRET_KEY=change-this-in-production
-```
-
-## Run
-
-```bash
-python app.py
+docker compose up --build
 ```
 
 Open http://localhost:5000 in your browser.
 
-## Demo accounts (from seed data)
+The Compose setup starts:
 
-| Role    | Email               |
-|---------|---------------------|
-| Student | shaan@sjec.ac.in    |
-| Student | asha@sjec.ac.in     |
-| Student | rohan@sjec.ac.in    |
-| Faculty | meera@sjec.ac.in    |
-| Faculty | ravi@sjec.ac.in     |
+- `web`: the Flask app served by Gunicorn
+- `db`: PostgreSQL 16 with the schema and sample data loaded from `Backend/sql_main.sql`
 
-> No passwords — login is email-only for now. Add password hashing
-> (bcrypt) before any real deployment.
+The database is stored in the `postgres_data` Docker volume. If you edit `Backend/sql_main.sql` and want to recreate the database from scratch, run:
 
-## What each role can do
+```bash
+docker compose down -v
+docker compose up --build
+```
 
-### Student
-- Dashboard: upcoming deadlines, pending assignments, recent grades
-- Assignments: view all, submit (file path/URL), see grade and feedback
-- Projects: view team, submit, see grade
-- Grades: full history of all submissions and marks
+## Demo Accounts
 
-### Faculty
-- Dashboard: subjects overview, queue of ungraded submissions
-- Subjects: drill into any subject to see assignments, projects, students
-- Create assignments and projects for any of their subjects
-- Grade any submission with marks + remarks
+Login is email-only.
+
+| Role    | Email            |
+|---------|------------------|
+| Student | shaan@sjec.ac.in |
+| Student | asha@sjec.ac.in  |
+| Student | rohan@sjec.ac.in |
+| Faculty | meera@sjec.ac.in |
+| Faculty | ravi@sjec.ac.in  |
+
+## Configuration
+
+The Docker defaults are defined in `docker-compose.yml`:
+
+```text
+DB_HOST=db
+DB_NAME=academic_db
+DB_USER=postgres
+DB_PASSWORD=postgres
+SECRET_KEY=change-this-before-production
+```
+
+Change `SECRET_KEY` before any real deployment.
+
+## Optional Local Python Run
+
+You can still run the app without Docker if you already have PostgreSQL and Python set up:
+
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python Backend\app.py
+```
+
+For local Python runs, set these environment variables if your PostgreSQL settings differ:
+
+```bash
+set DB_HOST=localhost
+set DB_NAME=academic_db
+set DB_USER=postgres
+set DB_PASSWORD=yourpassword
+set SECRET_KEY=change-this-in-production
+```

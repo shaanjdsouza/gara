@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Projects — SJEC Tasks{% endblock %}
+{% block title %}Projects - Gara{% endblock %}
 {% block content %}
 
 <div class="page-header">
@@ -52,21 +52,34 @@
           <span style="font-family:var(--mono);font-weight:600;color:var(--green)">
             {{ p.marks_obtained }}
           </span>
+          {% if p.remarks %}
+          <span style="font-size:12px;color:var(--muted)"> - {{ p.remarks }}</span>
+          {% endif %}
         </div>
         {% endif %}
       </div>
 
       <!-- Submit form -->
       <div style="min-width:220px">
+        {% if p.submission_id %}
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:0.35rem">Submission</div>
+          <code>{{ p.file_url or 'No file URL provided' }}</code>
+          <div style="font-size:12px;color:var(--muted);margin-top:0.6rem">
+            Submitted work can only be modified by a teacher.
+          </div>
+        </div>
+        {% else %}
         <form method="POST" action="{{ url_for('submit_project', pid_proj=p.project_id) }}">
           <div class="form-group" style="margin-bottom:0.5rem">
             <label>File URL / path</label>
             <input type="text" name="file_url" placeholder="/uploads/project.zip">
           </div>
           <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
-            {{ 'Update submission' if p.submission_id else 'Submit project' }}
+            Submit project
           </button>
         </form>
+        {% endif %}
       </div>
     </div>
   </div>

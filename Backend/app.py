@@ -4,8 +4,11 @@ import psycopg2.extras
 from datetime import date
 from functools import wraps
 import os
+from pathlib import Path
 
-app = Flask(__name__)
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+app = Flask(__name__, template_folder=str(BASE_DIR / "Frontend"))
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
 
 # ─── DB CONNECTION ────────────────────────────────────────────────────────────
@@ -136,19 +139,50 @@ def dashboard():
             deadlines=deadlines, recent_grades=recent_grades, pending=pending)
     else:
         # Faculty dashboard
-        subjects = query("SELECT * FROM subjects WHERE faculty_id = %s", (pid,))
+        subjects = query("""
+            SELECT s.*, COUNT(DISTINCT se.student_id) AS enrolled_count,
+                   COUNT(DISTINCT a.assignment_id)    AS assignment_count,
+                   COUNT(DISTINCT p.project_id)       AS project_count
+            FROM subjects s
+            LEFT JOIN subject_enrollments se ON se.subject_id = s.subject_id
+            LEFT JOIN assignments a ON a.subject_id = s.subject_id
+            LEFT JOIN projects p ON p.subject_id = s.subject_id
+            WHERE s.faculty_id = %s
+            GROUP BY s.subject_id
+            ORDER BY s.code
+        """, (pid,))
         ungraded = query("""
             SELECT s.submission_id, s.submission_type, s.ref_id,
-                   u.name AS student_name, s.submitted_at, s.status
+                   u.name AS student_name, s.submitted_at, s.status,
+                   COALESCE(a.title, p.title) AS title, sub.code AS subject_code
             FROM submissions s
             JOIN students st ON st.student_id = s.student_id
             JOIN users u ON u.user_id = st.user_id
+            LEFT JOIN assignments a ON a.assignment_id = s.ref_id AND s.submission_type = 'assignment'
+            LEFT JOIN projects p ON p.project_id = s.ref_id AND s.submission_type = 'project'
+            JOIN subjects sub ON sub.subject_id = COALESCE(a.subject_id, p.subject_id)
             LEFT JOIN grades g ON g.submission_id = s.submission_id
-            WHERE g.grade_id IS NULL OR g.marks_obtained IS NULL
+            WHERE sub.faculty_id = %s
+              AND (g.grade_id IS NULL OR g.marks_obtained IS NULL)
             ORDER BY s.submitted_at
-        """, ())
+        """, (pid,))
+        graded = query("""
+            SELECT s.submission_id, s.submission_type, u.name AS student_name,
+                   s.submitted_at, g.marks_obtained, g.graded_at,
+                   COALESCE(a.title, p.title) AS title, sub.code AS subject_code,
+                   a.max_marks
+            FROM submissions s
+            JOIN students st ON st.student_id = s.student_id
+            JOIN users u ON u.user_id = st.user_id
+            JOIN grades g ON g.submission_id = s.submission_id
+            LEFT JOIN assignments a ON a.assignment_id = s.ref_id AND s.submission_type = 'assignment'
+            LEFT JOIN projects p ON p.project_id = s.ref_id AND s.submission_type = 'project'
+            JOIN subjects sub ON sub.subject_id = COALESCE(a.subject_id, p.subject_id)
+            WHERE sub.faculty_id = %s AND g.marks_obtained IS NOT NULL
+            ORDER BY g.graded_at DESC LIMIT 8
+        """, (pid,))
         return render_template("faculty_dashboard.html",
-            subjects=subjects, ungraded=ungraded)
+            subjects=subjects, ungraded=ungraded, graded=graded)
 
 # ─── STUDENT: ASSIGNMENTS ────────────────────────────────────────────────────
 
@@ -157,21 +191,59 @@ def dashboard():
 @role_required("student")
 def assignments():
     pid = session["profile_id"]
+    search = request.args.get("q", "").strip()
+    sort_by = request.args.get("sort", "deadline")
+    sort_options = {
+        "deadline": "a.due_date ASC, a.title ASC",
+        "subject": "sub.name ASC, a.due_date ASC, a.title ASC",
+        "priority": "priority_rank ASC, a.due_date ASC, a.title ASC",
+    }
+    order_by = sort_options.get(sort_by, sort_options["deadline"])
+
+    params = [pid, pid]
+    search_sql = ""
+    if search:
+        search_sql = """
+          AND (
+              a.title ILIKE %s OR
+              COALESCE(a.description, '') ILIKE %s OR
+              sub.name ILIKE %s OR
+              sub.code ILIKE %s
+          )
+        """
+        pattern = f"%{search}%"
+        params.extend([pattern, pattern, pattern, pattern])
+
     rows = query("""
         SELECT a.assignment_id, a.title, a.description, a.due_date, a.max_marks,
                sub.name AS subject, sub.code,
-               s.submission_id, s.status, s.submitted_at,
-               g.marks_obtained, g.remarks
+               s.submission_id, s.status, s.submitted_at, s.file_url,
+               g.marks_obtained, g.remarks,
+               CASE
+                   WHEN s.submission_id IS NULL AND a.due_date < CURRENT_DATE THEN 0
+                   WHEN s.submission_id IS NULL AND a.due_date <= CURRENT_DATE + INTERVAL '3 days' THEN 1
+                   WHEN s.submission_id IS NULL THEN 2
+                   WHEN g.marks_obtained IS NULL THEN 3
+                   ELSE 4
+               END AS priority_rank
         FROM assignments a
         JOIN subjects sub ON sub.subject_id = a.subject_id
         JOIN subject_enrollments se ON se.subject_id = sub.subject_id AND se.student_id = %s
         LEFT JOIN submissions s ON s.ref_id = a.assignment_id
             AND s.submission_type = 'assignment' AND s.student_id = %s
         LEFT JOIN grades g ON g.submission_id = s.submission_id
-        ORDER BY a.due_date
-    """, (pid, pid))
+        WHERE 1 = 1
+    """ + search_sql + f"""
+        ORDER BY {order_by}
+    """, tuple(params))
     today = date.today()
-    return render_template("assignments.html", assignments=rows, today=today)
+    return render_template(
+        "assignments.html",
+        assignments=rows,
+        today=today,
+        search=search,
+        sort_by=sort_by if sort_by in sort_options else "deadline",
+    )
 
 @app.route("/assignments/<int:aid>/submit", methods=["POST"])
 @login_required
@@ -187,11 +259,7 @@ def submit_assignment(aid):
     due = query("SELECT due_date FROM assignments WHERE assignment_id = %s", (aid,), one=True)
     status = "late" if due and date.today() > due["due_date"] else "submitted"
     if existing:
-        execute("""
-            UPDATE submissions SET file_url = %s, submitted_at = NOW(), status = 'resubmitted'
-            WHERE submission_id = %s
-        """, (file_url, existing["submission_id"]))
-        flash("Submission updated.", "success")
+        flash("This assignment is already submitted. Ask your teacher to modify the submission.", "error")
     else:
         execute("""
             INSERT INTO submissions (student_id, submission_type, ref_id, file_url, status)
@@ -210,7 +278,8 @@ def projects():
     rows = query("""
         SELECT p.project_id, p.title, p.description, p.start_date, p.end_date,
                sub.name AS subject, sub.code, pm.role AS my_role,
-               s.submission_id, s.status, s.submitted_at, g.marks_obtained
+               s.submission_id, s.status, s.submitted_at, s.file_url,
+               g.marks_obtained, g.remarks
         FROM projects p
         JOIN project_members pm ON pm.project_id = p.project_id AND pm.student_id = %s
         JOIN subjects sub ON sub.subject_id = p.subject_id
@@ -247,11 +316,7 @@ def submit_project(pid_proj):
     proj = query("SELECT end_date FROM projects WHERE project_id = %s", (pid_proj,), one=True)
     status = "late" if proj and date.today() > proj["end_date"] else "submitted"
     if existing:
-        execute("""
-            UPDATE submissions SET file_url = %s, submitted_at = NOW(), status = 'resubmitted'
-            WHERE submission_id = %s
-        """, (file_url, existing["submission_id"]))
-        flash("Project submission updated.", "success")
+        flash("This project is already submitted. Ask your teacher to modify the submission.", "error")
     else:
         execute("""
             INSERT INTO submissions (student_id, submission_type, ref_id, file_url, status)
@@ -313,9 +378,37 @@ def faculty_subjects():
 @login_required
 @role_required("faculty")
 def faculty_subject_detail(sid):
-    subject     = query("SELECT * FROM subjects WHERE subject_id = %s", (sid,), one=True)
-    assignments = query("SELECT * FROM assignments WHERE subject_id = %s ORDER BY due_date", (sid,))
-    projects    = query("SELECT * FROM projects WHERE subject_id = %s ORDER BY end_date", (sid,))
+    pid = session["profile_id"]
+    subject = query(
+        "SELECT * FROM subjects WHERE subject_id = %s AND faculty_id = %s",
+        (sid, pid),
+        one=True,
+    )
+    if not subject:
+        flash("Subject not found or access denied.", "error")
+        return redirect(url_for("faculty_subjects"))
+    assignments = query("""
+        SELECT a.*,
+               COUNT(DISTINCT s.submission_id) AS submission_count,
+               COUNT(DISTINCT g.grade_id) FILTER (WHERE g.marks_obtained IS NOT NULL) AS graded_count
+        FROM assignments a
+        LEFT JOIN submissions s ON s.ref_id = a.assignment_id AND s.submission_type = 'assignment'
+        LEFT JOIN grades g ON g.submission_id = s.submission_id
+        WHERE a.subject_id = %s
+        GROUP BY a.assignment_id
+        ORDER BY a.due_date
+    """, (sid,))
+    projects = query("""
+        SELECT p.*,
+               COUNT(DISTINCT s.submission_id) AS submission_count,
+               COUNT(DISTINCT g.grade_id) FILTER (WHERE g.marks_obtained IS NOT NULL) AS graded_count
+        FROM projects p
+        LEFT JOIN submissions s ON s.ref_id = p.project_id AND s.submission_type = 'project'
+        LEFT JOIN grades g ON g.submission_id = s.submission_id
+        WHERE p.subject_id = %s
+        GROUP BY p.project_id
+        ORDER BY p.end_date
+    """, (sid,))
     students    = query("""
         SELECT st.student_id, u.name, st.usn
         FROM subject_enrollments se
@@ -323,8 +416,40 @@ def faculty_subject_detail(sid):
         JOIN users u ON u.user_id = st.user_id
         WHERE se.subject_id = %s ORDER BY u.name
     """, (sid,))
+    project_members = query("""
+        SELECT pm.project_id, u.name, st.usn, pm.role
+        FROM project_members pm
+        JOIN students st ON st.student_id = pm.student_id
+        JOIN users u ON u.user_id = st.user_id
+        JOIN projects p ON p.project_id = pm.project_id
+        WHERE p.subject_id = %s
+        ORDER BY pm.project_id, CASE WHEN pm.role = 'leader' THEN 0 ELSE 1 END, u.name
+    """, (sid,))
+    members_by_project = {}
+    for member in project_members:
+        members_by_project.setdefault(member["project_id"], []).append(member)
+
+    submissions = query("""
+        SELECT s.submission_id, s.submission_type, s.ref_id, s.file_url,
+               s.status, s.submitted_at, u.name AS student_name, st.usn,
+               g.marks_obtained, g.remarks, g.graded_at,
+               COALESCE(a.title, p.title) AS title, a.max_marks
+        FROM submissions s
+        JOIN students st ON st.student_id = s.student_id
+        JOIN users u ON u.user_id = st.user_id
+        LEFT JOIN assignments a ON a.assignment_id = s.ref_id AND s.submission_type = 'assignment'
+        LEFT JOIN projects p ON p.project_id = s.ref_id AND s.submission_type = 'project'
+        LEFT JOIN grades g ON g.submission_id = s.submission_id
+        WHERE COALESCE(a.subject_id, p.subject_id) = %s
+        ORDER BY s.submitted_at DESC
+    """, (sid,))
     return render_template("faculty_subject_detail.html",
-        subject=subject, assignments=assignments, projects=projects, students=students)
+        subject=subject,
+        assignments=assignments,
+        projects=projects,
+        students=students,
+        submissions=submissions,
+        members_by_project=members_by_project)
 
 @app.route("/faculty/assignments/create", methods=["GET", "POST"])
 @login_required
@@ -370,18 +495,31 @@ def grade_submission(sub_id):
     submission = query("""
         SELECT s.*, u.name AS student_name, st.usn,
                CASE WHEN s.submission_type = 'assignment' THEN a.title ELSE p.title END AS title,
-               CASE WHEN s.submission_type = 'assignment' THEN a.max_marks ELSE NULL END AS max_marks
+               CASE WHEN s.submission_type = 'assignment' THEN a.max_marks ELSE NULL END AS max_marks,
+               COALESCE(a.subject_id, p.subject_id) AS subject_id
         FROM submissions s
         JOIN students st ON st.student_id = s.student_id
         JOIN users u ON u.user_id = st.user_id
         LEFT JOIN assignments a ON a.assignment_id = s.ref_id AND s.submission_type = 'assignment'
         LEFT JOIN projects p ON p.project_id = s.ref_id AND s.submission_type = 'project'
-        WHERE s.submission_id = %s
-    """, (sub_id,), one=True)
+        LEFT JOIN subjects sub ON sub.subject_id = COALESCE(a.subject_id, p.subject_id)
+        WHERE s.submission_id = %s AND sub.faculty_id = %s
+    """, (sub_id, pid), one=True)
+    if not submission:
+        flash("Submission not found or access denied.", "error")
+        return redirect(url_for("dashboard"))
     existing_grade = query("SELECT * FROM grades WHERE submission_id = %s", (sub_id,), one=True)
     if request.method == "POST":
         marks   = request.form["marks_obtained"]
-        remarks = request.form["remarks"]
+        remarks = request.form.get("remarks", "")
+        file_url = request.form.get("file_url", "").strip()
+        status = request.form.get("status", submission["status"])
+        if status not in {"submitted", "late", "resubmitted"}:
+            status = submission["status"]
+        execute("""
+            UPDATE submissions SET file_url = %s, status = %s
+            WHERE submission_id = %s
+        """, (file_url, status, sub_id))
         if existing_grade:
             execute("""
                 UPDATE grades SET marks_obtained = %s, remarks = %s, graded_at = NOW()
@@ -398,4 +536,8 @@ def grade_submission(sub_id):
         submission=submission, existing_grade=existing_grade)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(
+        host=os.environ.get("APP_HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "5000")),
+        debug=os.environ.get("FLASK_DEBUG", "true").lower() == "true",
+    )

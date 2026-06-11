@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — SJEC Tasks{% endblock %}
+{% block title %}Dashboard - Gara{% endblock %}
 {% block content %}
 
 <div class="page-header">
@@ -50,13 +50,17 @@
     {% if ungraded %}
     <table>
       <thead>
-        <tr><th>Student</th><th>Type</th><th>Submitted</th><th></th></tr>
+        <tr><th>Student</th><th>Work</th><th>Type</th><th>Submitted</th><th></th></tr>
       </thead>
       <tbody>
         {% for u in ungraded %}
         <tr>
           <td>
             <div style="font-weight:500">{{ u.student_name }}</div>
+          </td>
+          <td>
+            <div style="font-weight:500">{{ u.title }}</div>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ u.subject_code }}</div>
           </td>
           <td>
             <span class="badge badge-{{ 'blue' if u.submission_type == 'assignment' else 'green' }}">
@@ -79,5 +83,43 @@
     {% endif %}
   </div>
 
+</div>
+
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-title">Recently graded</div>
+  {% if graded %}
+  <table>
+    <thead>
+      <tr><th>Student</th><th>Work</th><th>Type</th><th>Grade</th><th>Graded</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for g in graded %}
+      <tr>
+        <td style="font-weight:500">{{ g.student_name }}</td>
+        <td>
+          <div style="font-weight:500">{{ g.title }}</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ g.subject_code }}</div>
+        </td>
+        <td>
+          <span class="badge badge-{{ 'blue' if g.submission_type == 'assignment' else 'green' }}">
+            {{ g.submission_type }}
+          </span>
+        </td>
+        <td style="font-family:var(--mono);color:var(--green)">
+          {{ g.marks_obtained }}{% if g.max_marks %} / {{ g.max_marks }}{% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">
+          {{ g.graded_at.strftime('%d %b') if g.graded_at else '-' }}
+        </td>
+        <td>
+          <a href="{{ url_for('grade_submission', sub_id=g.submission_id) }}" class="btn btn-ghost btn-sm">Edit</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><div class="empty-icon">-</div>No graded submissions yet.</div>
+  {% endif %}
 </div>
 {% endblock %}

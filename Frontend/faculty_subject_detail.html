@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ subject.name }} — SJEC Tasks{% endblock %}
+{% block title %}{{ subject.name }} - Gara{% endblock %}
 {% block content %}
 
 <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
@@ -24,13 +24,15 @@
     <div class="card-title">Assignments</div>
     {% if assignments %}
     <table>
-      <thead><tr><th>Title</th><th>Due</th><th>Max marks</th></tr></thead>
+      <thead><tr><th>Title</th><th>Due</th><th>Max marks</th><th>Submitted</th><th>Graded</th></tr></thead>
       <tbody>
         {% for a in assignments %}
         <tr>
           <td style="font-weight:500">{{ a.title }}</td>
           <td style="font-family:var(--mono);font-size:12px">{{ a.due_date }}</td>
           <td style="font-family:var(--mono)">{{ a.max_marks }}</td>
+          <td style="font-family:var(--mono)">{{ a.submission_count }}</td>
+          <td style="font-family:var(--mono);color:var(--green)">{{ a.graded_count }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -45,12 +47,23 @@
     <div class="card-title">Projects</div>
     {% if projects %}
     <table>
-      <thead><tr><th>Title</th><th>End date</th></tr></thead>
+      <thead><tr><th>Title</th><th>End date</th><th>Team</th><th>Submitted</th><th>Graded</th></tr></thead>
       <tbody>
         {% for p in projects %}
         <tr>
           <td style="font-weight:500">{{ p.title }}</td>
           <td style="font-family:var(--mono);font-size:12px">{{ p.end_date }}</td>
+          <td>
+            {% for m in members_by_project.get(p.project_id, []) %}
+            <div style="font-size:12px">
+              {{ m.name }}
+              <span style="font-family:var(--mono);color:var(--muted)">({{ m.usn }})</span>
+              {% if m.role == 'leader' %}<span class="badge badge-yellow">leader</span>{% endif %}
+            </div>
+            {% endfor %}
+          </td>
+          <td style="font-family:var(--mono)">{{ p.submission_count }}</td>
+          <td style="font-family:var(--mono);color:var(--green)">{{ p.graded_count }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -60,6 +73,61 @@
     {% endif %}
   </div>
 
+</div>
+
+<!-- Submission history -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-title">Submissions and grades</div>
+  {% if submissions %}
+  <table>
+    <thead>
+      <tr><th>Student</th><th>Work</th><th>Type</th><th>Status</th><th>Submitted</th><th>Grade</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for sub in submissions %}
+      <tr>
+        <td>
+          <div style="font-weight:500">{{ sub.student_name }}</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ sub.usn }}</div>
+        </td>
+        <td>
+          <div style="font-weight:500">{{ sub.title }}</div>
+          {% if sub.file_url %}
+          <code>{{ sub.file_url }}</code>
+          {% endif %}
+        </td>
+        <td>
+          <span class="badge badge-{{ 'blue' if sub.submission_type == 'assignment' else 'green' }}">
+            {{ sub.submission_type }}
+          </span>
+        </td>
+        <td>
+          <span class="badge badge-{{ 'yellow' if sub.status == 'late' else 'gray' }}">
+            {{ sub.status }}
+          </span>
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">
+          {{ sub.submitted_at.strftime('%d %b %Y') if sub.submitted_at else '-' }}
+        </td>
+        <td style="font-family:var(--mono)">
+          {% if sub.marks_obtained is not none %}
+            <span style="color:var(--green)">{{ sub.marks_obtained }}{% if sub.max_marks %} / {{ sub.max_marks }}{% endif %}</span>
+          {% else %}
+            <span style="color:var(--muted)">Pending</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('grade_submission', sub_id=sub.submission_id) }}" class="btn btn-primary btn-sm">
+            {{ 'Edit' if sub.marks_obtained is not none else 'Grade' }}
+          </a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><div class="empty-icon">-</div>No submissions for this subject yet.</div>
+  {% endif %}
 </div>
 
 <!-- Enrolled students -->

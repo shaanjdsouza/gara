@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Grades — SJEC Tasks{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Grades</h1>
+  <p>All your submissions and their marks.</p>
+</div>
+
+{% if records %}
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Task</th>
+        <th>Subject</th>
+        <th>Type</th>
+        <th>Submitted</th>
+        <th>Status</th>
+        <th>Marks</th>
+        <th>Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in records %}
+      <tr>
+        <td style="font-weight:500">{{ r.title or ('#' ~ r.ref_id) }}</td>
+        <td style="color:var(--muted);font-size:12px">
+          {% if r.code %}<span style="font-family:var(--mono);color:var(--accent)">{{ r.code }}</span> {% endif %}
+          {{ r.subject or '—' }}
+        </td>
+        <td>
+          <span class="badge badge-{{ 'blue' if r.submission_type == 'assignment' else 'green' }}">
+            {{ r.submission_type }}
+          </span>
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">
+          {{ r.submitted_at.strftime('%d %b %Y') if r.submitted_at else '—' }}
+        </td>
+        <td>
+          {% if r.status == 'late' %}
+            <span class="badge badge-yellow">late</span>
+          {% elif r.status == 'resubmitted' %}
+            <span class="badge badge-blue">resubmitted</span>
+          {% else %}
+            <span class="badge badge-gray">{{ r.status }}</span>
+          {% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-weight:600">
+          {% if r.marks_obtained is not none %}
+            <span style="color:var(--green)">{{ r.marks_obtained }}</span>
+            {% if r.max_marks %}
+              <span style="color:var(--muted);font-weight:400"> / {{ r.max_marks }}</span>
+            {% endif %}
+          {% else %}
+            <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="color:var(--muted);font-size:12px;max-width:200px">
+          {{ r.remarks or '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty"><div class="empty-icon">📊</div>No submissions yet.</div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SJEC Tasks{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Good to see you, {{ session.name.split()[0] }}</h1>
+  <p>Here's what's coming up.</p>
+</div>
+
+<div class="grid-3" style="margin-bottom:1.5rem">
+  <div class="card stat">
+    <div class="stat-val" style="color:var(--yellow)">{{ pending|length }}</div>
+    <div class="stat-label">Pending assignments</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-val" style="color:var(--accent)">{{ deadlines|length }}</div>
+    <div class="stat-label">Due in 14 days</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-val" style="color:var(--green)">{{ recent_grades|length }}</div>
+    <div class="stat-label">Recently graded</div>
+  </div>
+</div>
+
+<div class="grid-2" style="gap:1.5rem">
+
+  <!-- Upcoming deadlines -->
+  <div class="card">
+    <div class="card-title">Upcoming deadlines</div>
+    {% if deadlines %}
+    <table>
+      <thead>
+        <tr><th>Task</th><th>Subject</th><th>Due</th><th>Type</th></tr>
+      </thead>
+      <tbody>
+        {% for d in deadlines %}
+        <tr>
+          <td>{{ d.title }}</td>
+          <td style="color:var(--muted)">{{ d.subject }}</td>
+          <td style="font-family:var(--mono);font-size:12px">{{ d.due_date }}</td>
+          <td>
+            {% if d.type == 'assignment' %}
+              <span class="badge badge-blue">assignment</span>
+            {% else %}
+              <span class="badge badge-green">project</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><div class="empty-icon">✓</div>Nothing due in the next 14 days.</div>
+    {% endif %}
+  </div>
+
+  <!-- Pending submissions -->
+  <div class="card">
+    <div class="card-title">Not yet submitted</div>
+    {% if pending %}
+    <table>
+      <thead>
+        <tr><th>Assignment</th><th>Subject</th><th>Due</th></tr>
+      </thead>
+      <tbody>
+        {% for a in pending %}
+        <tr>
+          <td>
+            <a href="{{ url_for('assignments') }}"
+               style="color:var(--text);text-decoration:none">{{ a.title }}</a>
+          </td>
+          <td style="color:var(--muted)">{{ a.subject }}</td>
+          <td style="font-family:var(--mono);font-size:12px;color:var(--red)">{{ a.due_date }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><div class="empty-icon">✓</div>All assignments submitted.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Recent grades -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-title">Recent grades</div>
+  {% if recent_grades %}
+  <table>
+    <thead>
+      <tr><th>Type</th><th>Marks</th><th>Remarks</th><th>Graded on</th></tr>
+    </thead>
+    <tbody>
+      {% for g in recent_grades %}
+      <tr>
+        <td><span class="badge badge-gray">{{ g.submission_type }}</span> #{{ g.ref_id }}</td>
+        <td style="font-family:var(--mono);font-weight:600;color:var(--green)">
+          {{ g.marks_obtained }}
+        </td>
+        <td style="color:var(--muted)">{{ g.remarks or '—' }}</td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">
+          {{ g.graded_at.strftime('%d %b %Y') if g.graded_at else '—' }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><div class="empty-icon">📋</div>No grades yet.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

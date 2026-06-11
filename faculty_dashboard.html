@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SJEC Tasks{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Faculty Dashboard</h1>
+  <p>{{ session.name }} — {{ subjects|length }} subject{{ 's' if subjects|length != 1 }}</p>
+</div>
+
+<div class="grid-2" style="gap:1.5rem">
+
+  <!-- My subjects -->
+  <div class="card">
+    <div class="card-title">Your subjects</div>
+    {% if subjects %}
+    <table>
+      <thead>
+        <tr><th>Subject</th><th>Students</th><th>Tasks</th></tr>
+      </thead>
+      <tbody>
+        {% for s in subjects %}
+        <tr>
+          <td>
+            <a href="{{ url_for('faculty_subject_detail', sid=s.subject_id) }}"
+               style="color:var(--text);text-decoration:none;font-weight:500">
+              {{ s.name }}
+            </a>
+            <div style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ s.code }}</div>
+          </td>
+          <td style="font-family:var(--mono)">{{ s.enrolled_count }}</td>
+          <td style="color:var(--muted);font-size:12px">
+            {{ s.assignment_count }} assign. · {{ s.project_count }} proj.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><div class="empty-icon">📚</div>No subjects assigned yet.</div>
+    {% endif %}
+    <div style="margin-top:1rem;display:flex;gap:0.5rem">
+      <a href="{{ url_for('create_assignment') }}" class="btn btn-primary btn-sm">+ Assignment</a>
+      <a href="{{ url_for('create_project') }}"    class="btn btn-ghost  btn-sm">+ Project</a>
+    </div>
+  </div>
+
+  <!-- Pending to grade -->
+  <div class="card">
+    <div class="card-title">Awaiting grades</div>
+    {% if ungraded %}
+    <table>
+      <thead>
+        <tr><th>Student</th><th>Type</th><th>Submitted</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for u in ungraded %}
+        <tr>
+          <td>
+            <div style="font-weight:500">{{ u.student_name }}</div>
+          </td>
+          <td>
+            <span class="badge badge-{{ 'blue' if u.submission_type == 'assignment' else 'green' }}">
+              {{ u.submission_type }}
+            </span>
+          </td>
+          <td style="font-family:var(--mono);font-size:11px;color:var(--muted)">
+            {{ u.submitted_at.strftime('%d %b') if u.submitted_at else '—' }}
+          </td>
+          <td>
+            <a href="{{ url_for('grade_submission', sub_id=u.submission_id) }}"
+               class="btn btn-primary btn-sm">Grade</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><div class="empty-icon">✓</div>All submissions graded.</div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ subject.name }} — SJEC Tasks{% endblock %}
+{% block content %}
+
+<div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between">
+  <div>
+    <div style="font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:4px">
+      <a href="{{ url_for('faculty_subjects') }}" style="color:var(--muted);text-decoration:none">Subjects</a>
+      → {{ subject.code }}
+    </div>
+    <h1>{{ subject.name }}</h1>
+    <p>Semester {{ subject.semester }} · {{ students|length }} enrolled students</p>
+  </div>
+  <div style="display:flex;gap:0.5rem">
+    <a href="{{ url_for('create_assignment') }}" class="btn btn-primary">+ Assignment</a>
+    <a href="{{ url_for('create_project') }}"    class="btn btn-ghost">+ Project</a>
+  </div>
+</div>
+
+<div class="grid-2" style="gap:1.5rem">
+
+  <!-- Assignments -->
+  <div class="card">
+    <div class="card-title">Assignments</div>
+    {% if assignments %}
+    <table>
+      <thead><tr><th>Title</th><th>Due</th><th>Max marks</th></tr></thead>
+      <tbody>
+        {% for a in assignments %}
+        <tr>
+          <td style="font-weight:500">{{ a.title }}</td>
+          <td style="font-family:var(--mono);font-size:12px">{{ a.due_date }}</td>
+          <td style="font-family:var(--mono)">{{ a.max_marks }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty" style="padding:1.5rem"><div class="empty-icon">📝</div>No assignments yet.</div>
+    {% endif %}
+  </div>
+
+  <!-- Projects -->
+  <div class="card">
+    <div class="card-title">Projects</div>
+    {% if projects %}
+    <table>
+      <thead><tr><th>Title</th><th>End date</th></tr></thead>
+      <tbody>
+        {% for p in projects %}
+        <tr>
+          <td style="font-weight:500">{{ p.title }}</td>
+          <td style="font-family:var(--mono);font-size:12px">{{ p.end_date }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty" style="padding:1.5rem"><div class="empty-icon">🗂</div>No projects yet.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Enrolled students -->
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-title">Enrolled students</div>
+  {% if students %}
+  <table>
+    <thead><tr><th>Name</th><th>USN</th></tr></thead>
+    <tbody>
+      {% for s in students %}
+      <tr>
+        <td style="font-weight:500">{{ s.name }}</td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--muted)">{{ s.usn }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty"><div class="empty-icon">👥</div>No students enrolled.</div>
+  {% endif %}
+</div>
+
+{% endblock %}

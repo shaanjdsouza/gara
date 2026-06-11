@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SJEC Task Manager{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #181c27;
+      --surface2:  #1e2333;
+      --border:    #2a2f42;
+      --accent:    #4f7fff;
+      --accent-dim:#2d4a99;
+      --green:     #34c77b;
+      --red:       #f0524f;
+      --yellow:    #f5a623;
+      --text:      #e2e6f0;
+      --muted:     #7a8299;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'Inter', sans-serif;
+      --radius:    8px;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      display: flex;
+      align-items: center;
+      height: 56px;
+      gap: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .nav-brand {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      text-decoration: none;
+      margin-right: 2rem;
+      flex-shrink: 0;
+    }
+    .nav-brand span { color: var(--muted); }
+    .nav-links { display: flex; gap: 0; flex: 1; }
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 0 1rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 500;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links a.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-left: auto;
+    }
+    .nav-user {
+      font-size: 12px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .nav-user strong { color: var(--text); }
+    .role-badge {
+      font-size: 10px;
+      font-family: var(--mono);
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 99px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .role-student { background: #1a2e4a; color: #4f7fff; border: 1px solid #2d4a99; }
+    .role-faculty { background: #1a2e1a; color: #34c77b; border: 1px solid #1e4a2a; }
+    .btn-logout {
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      transition: all 0.15s;
+    }
+    .btn-logout:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── LAYOUT ── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .page-header { margin-bottom: 2rem; }
+    .page-header h1 { font-size: 22px; font-weight: 600; }
+    .page-header p  { color: var(--muted); margin-top: 4px; font-size: 13px; }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+
+    /* ── STAT BOX ── */
+    .stat { text-align: center; padding: 1rem; }
+    .stat-val { font-size: 28px; font-weight: 600; font-family: var(--mono); }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* ── TABLE ── */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-family: var(--mono);
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .badge-green  { background: #0d2e1a; color: var(--green); border: 1px solid #1a4a2a; }
+    .badge-blue   { background: #0d1e3a; color: var(--accent); border: 1px solid var(--accent-dim); }
+    .badge-red    { background: #2e0d0d; color: var(--red); border: 1px solid #4a1a1a; }
+    .badge-yellow { background: #2e1f0d; color: var(--yellow); border: 1px solid #4a3a1a; }
+    .badge-gray   { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      transition: all 0.15s;
+      font-family: var(--sans);
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #6a8fff; }
+    .btn-ghost  { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+    /* ── FORMS ── */
+    .form-group { margin-bottom: 1.25rem; }
+    label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; }
+    input[type="text"], input[type="email"], input[type="date"],
+    input[type="number"], select, textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--sans);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── ALERTS ── */
+    .alert {
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      margin-bottom: 1rem;
+    }
+    .alert-success { background: #0d2e1a; color: var(--green); border: 1px solid #1a4a2a; }
+    .alert-error   { background: #2e0d0d; color: var(--red);   border: 1px solid #4a1a1a; }
+
+    /* ── EMPTY STATE ── */
+    .empty {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .empty-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+    /* ── CODE ── */
+    code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--surface2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    @media (max-width: 700px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      nav { padding: 0 1rem; }
+      .nav-links a { padding: 0 0.6rem; }
+    }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+{% if session.user_id %}
+<nav>
+  <a class="nav-brand" href="{{ url_for('dashboard') }}">SJEC<span>/</span>tasks</a>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}"
+       class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Dashboard</a>
+    {% if session.role == 'student' %}
+      <a href="{{ url_for('assignments') }}"
+         class="{% if request.endpoint == 'assignments' %}active{% endif %}">Assignments</a>
+      <a href="{{ url_for('projects') }}"
+         class="{% if request.endpoint == 'projects' %}active{% endif %}">Projects</a>
+      <a href="{{ url_for('grades') }}"
+         class="{% if request.endpoint == 'grades' %}active{% endif %}">Grades</a>
+    {% elif session.role == 'faculty' %}
+      <a href="{{ url_for('faculty_subjects') }}"
+         class="{% if 'faculty' in request.endpoint %}active{% endif %}">Subjects</a>
+    {% endif %}
+  </div>
+  <div class="nav-right">
+    <span class="nav-user"><strong>{{ session.name.split()[0] }}</strong></span>
+    <span class="role-badge role-{{ session.role }}">{{ session.role }}</span>
+    <a class="btn-logout" href="{{ url_for('logout') }}">Sign out</a>
+  </div>
+</nav>
+{% endif %}
+
+<div class="page">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</div>
+
+</body>
+</html>

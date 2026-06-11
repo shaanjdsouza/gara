@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Projects — SJEC Tasks{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Projects</h1>
+  <p>Team projects you are part of.</p>
+</div>
+
+{% if projects %}
+<div style="display:flex;flex-direction:column;gap:1.25rem">
+  {% for p in projects %}
+  <div class="card" style="{% if p.submission_id %}border-left:3px solid var(--green){% elif p.end_date < today %}border-left:3px solid var(--red){% else %}border-left:3px solid var(--border){% endif %}">
+    <div style="display:flex;align-items:flex-start;gap:1.5rem">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
+          <span style="font-weight:600;font-size:15px">{{ p.title }}</span>
+          {% if p.my_role == 'leader' %}
+            <span class="badge badge-yellow">team leader</span>
+          {% endif %}
+          {% if p.submission_id %}
+            <span class="badge badge-green">submitted</span>
+          {% elif p.end_date < today %}
+            <span class="badge badge-red">overdue</span>
+          {% else %}
+            <span class="badge badge-gray">in progress</span>
+          {% endif %}
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:0.5rem">
+          <span style="font-family:var(--mono);color:var(--accent)">{{ p.code }}</span>
+          {{ p.subject }} &nbsp;·&nbsp;
+          {{ p.start_date }} → <strong>{{ p.end_date }}</strong>
+        </div>
+        {% if p.description %}
+        <p style="font-size:13px;color:var(--muted);margin-bottom:0.75rem">{{ p.description }}</p>
+        {% endif %}
+
+        <!-- Team members -->
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+          {% for m in p.members %}
+          <span style="font-size:12px;background:var(--surface2);border:1px solid var(--border);
+                       padding:3px 10px;border-radius:99px;color:var(--text)">
+            {{ m.name.split()[0] }}
+            {% if m.role == 'leader' %}<span style="color:var(--yellow)"> ★</span>{% endif %}
+          </span>
+          {% endfor %}
+        </div>
+
+        {% if p.submission_id and p.marks_obtained is not none %}
+        <div style="margin-top:0.75rem;padding:0.75rem;background:var(--surface2);border-radius:6px">
+          <span style="font-size:12px;color:var(--muted)">Grade: </span>
+          <span style="font-family:var(--mono);font-weight:600;color:var(--green)">
+            {{ p.marks_obtained }}
+          </span>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Submit form -->
+      <div style="min-width:220px">
+        <form method="POST" action="{{ url_for('submit_project', pid_proj=p.project_id) }}">
+          <div class="form-group" style="margin-bottom:0.5rem">
+            <label>File URL / path</label>
+            <input type="text" name="file_url" placeholder="/uploads/project.zip">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
+            {{ 'Update submission' if p.submission_id else 'Submit project' }}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty"><div class="empty-icon">🗂</div>You are not in any projects yet.</div>
+</div>
+{% endif %}
+
+{% endblock %}

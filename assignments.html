@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Assignments — SJEC Tasks{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Assignments</h1>
+  <p>All assignments across your enrolled subjects.</p>
+</div>
+
+{% if assignments %}
+<div style="display:flex;flex-direction:column;gap:1rem">
+  {% for a in assignments %}
+  <div class="card" style="{% if a.submission_id %}border-left:3px solid var(--green){% elif a.due_date < today %}border-left:3px solid var(--red){% else %}border-left:3px solid var(--border){% endif %}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.4rem">
+          <span style="font-weight:600;font-size:15px">{{ a.title }}</span>
+          {% if a.submission_id %}
+            {% if a.status == 'late' %}
+              <span class="badge badge-yellow">submitted late</span>
+            {% elif a.status == 'resubmitted' %}
+              <span class="badge badge-blue">resubmitted</span>
+            {% else %}
+              <span class="badge badge-green">submitted</span>
+            {% endif %}
+          {% elif a.due_date < today %}
+            <span class="badge badge-red">overdue</span>
+          {% else %}
+            <span class="badge badge-gray">pending</span>
+          {% endif %}
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:0.5rem">
+          <span style="font-family:var(--mono);color:var(--accent)">{{ a.code }}</span>
+          {{ a.subject }} &nbsp;·&nbsp;
+          Due <strong style="color:{% if a.due_date < today and not a.submission_id %}var(--red){% else %}var(--text){% endif %}">
+            {{ a.due_date }}
+          </strong>
+          &nbsp;·&nbsp; Max marks: {{ a.max_marks }}
+        </div>
+        {% if a.description %}
+        <p style="font-size:13px;color:var(--muted)">{{ a.description }}</p>
+        {% endif %}
+        {% if a.submission_id and a.marks_obtained is not none %}
+        <div style="margin-top:0.75rem;padding:0.75rem;background:var(--surface2);border-radius:6px">
+          <span style="font-size:12px;color:var(--muted)">Grade: </span>
+          <span style="font-family:var(--mono);font-weight:600;color:var(--green)">
+            {{ a.marks_obtained }} / {{ a.max_marks }}
+          </span>
+          {% if a.remarks %}
+          <span style="font-size:12px;color:var(--muted)"> — {{ a.remarks }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Submit form -->
+      <div style="min-width:220px">
+        <form method="POST" action="{{ url_for('submit_assignment', aid=a.assignment_id) }}">
+          <div class="form-group" style="margin-bottom:0.5rem">
+            <label>File URL / path</label>
+            <input type="text" name="file_url"
+                   placeholder="/uploads/yourfile.pdf"
+                   value="{{ a.file_url if a.file_url else '' }}">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
+            {{ 'Update submission' if a.submission_id else 'Submit' }}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <div class="empty"><div class="empty-icon">📝</div>No assignments found for your subjects.</div>
+</div>
+{% endif %}
+
+{% endblock %}

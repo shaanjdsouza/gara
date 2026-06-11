@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — SJEC Task Manager</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #181c27; --surface2: #1e2333;
+      --border: #2a2f42; --accent: #4f7fff; --red: #f0524f;
+      --text: #e2e6f0; --muted: #7a8299;
+      --sans: 'Inter', sans-serif; --mono: 'JetBrains Mono', monospace;
+    }
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .login-wrap { width: 100%; max-width: 380px; }
+    .login-header { text-align: center; margin-bottom: 2rem; }
+    .login-logo {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      margin-bottom: 0.5rem;
+    }
+    .login-logo span { color: var(--muted); }
+    .login-sub { font-size: 13px; color: var(--muted); }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+    }
+    .form-group { margin-bottom: 1.25rem; }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    input[type="email"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: var(--sans);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="email"]:focus { border-color: var(--accent); }
+    .btn-login {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: var(--sans);
+      transition: background 0.15s;
+      margin-top: 0.25rem;
+    }
+    .btn-login:hover { background: #6a8fff; }
+    .alert-error {
+      background: #2e0d0d;
+      color: var(--red);
+      border: 1px solid #4a1a1a;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 1.25rem;
+    }
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 1.25rem;
+      font-family: var(--mono);
+    }
+    .hint code {
+      background: var(--surface2);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--accent);
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-header">
+    <div class="login-logo">SJEC<span>/</span>tasks</div>
+    <div class="login-sub">Academic Task & Assignment Manager</div>
+  </div>
+  <div class="login-card">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="alert-{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    <form method="POST">
+      <div class="form-group">
+        <label for="email">College email address</label>
+        <input type="email" id="email" name="email"
+               placeholder="yourname@sjec.ac.in" autofocus required>
+      </div>
+      <button type="submit" class="btn-login">Sign in →</button>
+    </form>
+    <div class="hint">
+      Demo accounts &mdash;
+      student: <code>shaan@sjec.ac.in</code> &nbsp;
+      faculty: <code>meera@sjec.ac.in</code>
+    </div>
+  </div>
+</div>
+</body>
+</html>

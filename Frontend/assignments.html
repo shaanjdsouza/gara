@@ -81,18 +81,20 @@
         {% if a.submission_id %}
         <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:0.75rem">
           <div style="font-size:12px;color:var(--muted);margin-bottom:0.35rem">Submission</div>
-          <code>{{ a.file_url or 'No file URL provided' }}</code>
+          {% if a.file_url %}
+          <a href="{{ a.file_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px">View PDF</a>
+          {% else %}
+          <span class="badge badge-green">submitted in person</span>
+          {% endif %}
           <div style="font-size:12px;color:var(--muted);margin-top:0.6rem">
             Submitted work can only be modified by a teacher.
           </div>
         </div>
         {% else %}
-        <form method="POST" action="{{ url_for('submit_assignment', aid=a.assignment_id) }}">
+        <form method="POST" action="{{ url_for('submit_assignment', aid=a.assignment_id) }}" enctype="multipart/form-data">
           <div class="form-group" style="margin-bottom:0.5rem">
-            <label>File URL / path</label>
-            <input type="text" name="file_url"
-                   placeholder="/uploads/yourfile.pdf"
-                   value="{{ a.file_url if a.file_url else '' }}">
+            <label>PDF file</label>
+            <input type="file" name="submission_file" accept="application/pdf,.pdf" required>
           </div>
           <button type="submit" class="btn btn-primary btn-sm" style="width:100%">
             Submit

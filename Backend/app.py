@@ -1,12 +1,18 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory
 import psycopg2
 import psycopg2.extras
 from datetime import date
 from functools import wraps
 import os
 from pathlib import Path
+from urllib.parse import urlparse
+from uuid import uuid4
+from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+UPLOAD_ROOT = BASE_DIR / "uploads"
+ASSIGNMENT_UPLOAD_DIR = UPLOAD_ROOT / "assignments"
+ALLOWED_ASSIGNMENT_EXTENSIONS = {".pdf"}
 
 app = Flask(__name__, template_folder=str(BASE_DIR / "Frontend"))
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
@@ -37,6 +43,25 @@ def execute(sql, params=()):
     conn.commit()
     conn.close()
 
+def save_assignment_pdf(file_storage, student_id, assignment_id):
+    filename = secure_filename(file_storage.filename or "")
+    ext = Path(filename).suffix.lower()
+    if not filename or ext not in ALLOWED_ASSIGNMENT_EXTENSIONS:
+        return None
+    ASSIGNMENT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    stored_name = f"assignment_{assignment_id}_student_{student_id}_{uuid4().hex}{ext}"
+    file_storage.save(ASSIGNMENT_UPLOAD_DIR / stored_name)
+    return url_for("uploaded_file", filename=f"assignments/{stored_name}")
+
+def is_github_repo_url(value):
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    if parsed.netloc.lower() != "github.com":
+        return False
+    parts = [part for part in parsed.path.strip("/").split("/") if part]
+    return len(parts) == 2
+
 # ─── AUTH DECORATORS ─────────────────────────────────────────────────────────
 
 def login_required(f):
@@ -57,6 +82,11 @@ def role_required(role):
             return f(*args, **kwargs)
         return decorated
     return decorator
+
+@app.route("/uploads/<path:filename>")
+@login_required
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_ROOT, filename)
 
 # ─── AUTH ROUTES ─────────────────────────────────────────────────────────────
 
@@ -250,7 +280,6 @@ def assignments():
 @role_required("student")
 def submit_assignment(aid):
     pid      = session["profile_id"]
-    file_url = request.form.get("file_url", "").strip()
     # Check if already submitted
     existing = query("""
         SELECT submission_id FROM submissions
@@ -261,6 +290,14 @@ def submit_assignment(aid):
     if existing:
         flash("This assignment is already submitted. Ask your teacher to modify the submission.", "error")
     else:
+        submission_file = request.files.get("submission_file")
+        if not submission_file or not submission_file.filename:
+            flash("Please upload a PDF file for this assignment.", "error")
+            return redirect(url_for("assignments"))
+        file_url = save_assignment_pdf(submission_file, pid, aid)
+        if not file_url:
+            flash("Assignment submissions must be PDF files.", "error")
+            return redirect(url_for("assignments"))
         execute("""
             INSERT INTO submissions (student_id, submission_type, ref_id, file_url, status)
             VALUES (%s, 'assignment', %s, %s, %s)
@@ -308,7 +345,10 @@ def projects():
 @role_required("student")
 def submit_project(pid_proj):
     pid      = session["profile_id"]
-    file_url = request.form.get("file_url", "").strip()
+    github_url = request.form.get("github_url", "").strip()
+    if not is_github_repo_url(github_url):
+        flash("Please submit a valid GitHub repository URL.", "error")
+        return redirect(url_for("projects"))
     existing = query("""
         SELECT submission_id FROM submissions
         WHERE student_id = %s AND submission_type = 'project' AND ref_id = %s
@@ -321,7 +361,7 @@ def submit_project(pid_proj):
         execute("""
             INSERT INTO submissions (student_id, submission_type, ref_id, file_url, status)
             VALUES (%s, 'project', %s, %s, %s)
-        """, (pid, pid_proj, file_url, status))
+        """, (pid, pid_proj, github_url, status))
         flash("Project submitted!", "success")
     return redirect(url_for("projects"))
 
@@ -468,6 +508,46 @@ def create_assignment():
         return redirect(url_for("faculty_subjects"))
     return render_template("create_assignment.html", subjects=subjects)
 
+@app.route("/faculty/assignments/<int:aid>/mark-in-person", methods=["POST"])
+@login_required
+@role_required("faculty")
+def mark_assignment_in_person(aid):
+    pid = session["profile_id"]
+    student_id = request.form.get("student_id")
+    assignment = query("""
+        SELECT a.assignment_id, a.subject_id
+        FROM assignments a
+        JOIN subjects sub ON sub.subject_id = a.subject_id
+        WHERE a.assignment_id = %s AND sub.faculty_id = %s
+    """, (aid, pid), one=True)
+    if not assignment:
+        flash("Assignment not found or access denied.", "error")
+        return redirect(url_for("faculty_subjects"))
+    enrolled = query("""
+        SELECT 1 FROM subject_enrollments
+        WHERE subject_id = %s AND student_id = %s
+    """, (assignment["subject_id"], student_id), one=True)
+    if not enrolled:
+        flash("Student is not enrolled in this subject.", "error")
+        return redirect(url_for("faculty_subject_detail", sid=assignment["subject_id"]))
+    existing = query("""
+        SELECT submission_id FROM submissions
+        WHERE student_id = %s AND submission_type = 'assignment' AND ref_id = %s
+    """, (student_id, aid), one=True)
+    if existing:
+        execute("""
+            UPDATE submissions
+            SET status = 'submitted', submitted_at = NOW()
+            WHERE submission_id = %s
+        """, (existing["submission_id"],))
+    else:
+        execute("""
+            INSERT INTO submissions (student_id, submission_type, ref_id, file_url, status)
+            VALUES (%s, 'assignment', %s, NULL, 'submitted')
+        """, (student_id, aid))
+    flash("Assignment marked as submitted in person.", "success")
+    return redirect(url_for("faculty_subject_detail", sid=assignment["subject_id"]))
+
 @app.route("/faculty/projects/create", methods=["GET", "POST"])
 @login_required
 @role_required("faculty")
@@ -512,10 +592,27 @@ def grade_submission(sub_id):
     if request.method == "POST":
         marks   = request.form["marks_obtained"]
         remarks = request.form.get("remarks", "")
-        file_url = request.form.get("file_url", "").strip()
         status = request.form.get("status", submission["status"])
         if status not in {"submitted", "late", "resubmitted"}:
             status = submission["status"]
+        file_url = submission["file_url"] or ""
+        if submission["submission_type"] == "assignment":
+            if request.form.get("submitted_in_person"):
+                file_url = ""
+                status = "submitted"
+            else:
+                submission_file = request.files.get("submission_file")
+                if submission_file and submission_file.filename:
+                    saved_url = save_assignment_pdf(submission_file, submission["student_id"], submission["ref_id"])
+                    if not saved_url:
+                        flash("Assignment submissions must be PDF files.", "error")
+                        return redirect(url_for("grade_submission", sub_id=sub_id))
+                    file_url = saved_url
+        else:
+            file_url = request.form.get("github_url", "").strip()
+            if not is_github_repo_url(file_url):
+                flash("Please submit a valid GitHub repository URL.", "error")
+                return redirect(url_for("grade_submission", sub_id=sub_id))
         execute("""
             UPDATE submissions SET file_url = %s, status = %s
             WHERE submission_id = %s

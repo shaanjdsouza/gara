@@ -18,11 +18,23 @@
       Student: <strong style="color:var(--text)">{{ submission.student_name }}</strong>
       ({{ submission.usn }})
     </div>
-    {% if submission.file_url %}
     <div style="font-size:12px;color:var(--muted);margin-top:4px">
-      File: <code style="color:var(--accent)">{{ submission.file_url }}</code>
+      {% if submission.submission_type == 'assignment' %}
+        PDF:
+        {% if submission.file_url %}
+          <a href="{{ submission.file_url }}" target="_blank" rel="noopener" style="color:var(--accent)">View submission</a>
+        {% else %}
+          <span class="badge badge-green">submitted in person</span>
+        {% endif %}
+      {% else %}
+        GitHub:
+        {% if submission.file_url %}
+          <a href="{{ submission.file_url }}" target="_blank" rel="noopener" style="color:var(--accent)">{{ submission.file_url }}</a>
+        {% else %}
+          <code>No GitHub repo provided</code>
+        {% endif %}
+      {% endif %}
     </div>
-    {% endif %}
     <div style="font-size:12px;color:var(--muted);margin-top:4px">
       Submitted:
       <span style="font-family:var(--mono)">
@@ -40,13 +52,26 @@
     {% endif %}
   </div>
 
-  <form method="POST">
+  <form method="POST" enctype="multipart/form-data">
+    {% if submission.submission_type == 'assignment' %}
     <div class="form-group">
-      <label>Submission file URL / path</label>
-      <input type="text" name="file_url"
-             value="{{ submission.file_url or '' }}"
-             placeholder="/uploads/submission.pdf">
+      <label>Replacement PDF</label>
+      <input type="file" name="submission_file" accept="application/pdf,.pdf">
     </div>
+    <div class="form-group">
+      <label style="display:flex;align-items:center;gap:0.5rem;color:var(--text)">
+        <input type="checkbox" name="submitted_in_person" value="1">
+        Submitted in person
+      </label>
+    </div>
+    {% else %}
+    <div class="form-group">
+      <label>GitHub repo URL</label>
+      <input type="text" name="github_url"
+             value="{{ submission.file_url or '' }}"
+             placeholder="https://github.com/owner/repo" required>
+    </div>
+    {% endif %}
     <div class="form-group">
       <label>Status</label>
       <select name="status">

@@ -75,6 +75,36 @@
 
 </div>
 
+{% if assignments and students %}
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-title">Mark in-person assignment submission</div>
+  <form method="POST" id="in-person-form" style="display:grid;grid-template-columns:1fr 1fr auto;gap:0.75rem;align-items:end">
+    <div class="form-group" style="margin-bottom:0">
+      <label>Assignment</label>
+      <select name="assignment_id" onchange="document.getElementById('in-person-form').action='{{ url_for('mark_assignment_in_person', aid=0) }}'.replace('/0/', '/' + this.value + '/')">
+        {% for a in assignments %}
+        <option value="{{ a.assignment_id }}">{{ a.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label>Student</label>
+      <select name="student_id" required>
+        {% for s in students %}
+        <option value="{{ s.student_id }}">{{ s.name }} ({{ s.usn }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Mark submitted</button>
+  </form>
+  <script>
+    const inPersonForm = document.getElementById('in-person-form');
+    const assignmentSelect = inPersonForm.querySelector('select[name="assignment_id"]');
+    inPersonForm.action = "{{ url_for('mark_assignment_in_person', aid=0) }}".replace('/0/', '/' + assignmentSelect.value + '/');
+  </script>
+</div>
+{% endif %}
+
 <!-- Submission history -->
 <div class="card" style="margin-top:1.5rem">
   <div class="card-title">Submissions and grades</div>
@@ -92,8 +122,14 @@
         </td>
         <td>
           <div style="font-weight:500">{{ sub.title }}</div>
-          {% if sub.file_url %}
-          <code>{{ sub.file_url }}</code>
+          {% if sub.submission_type == 'assignment' %}
+            {% if sub.file_url %}
+            <a href="{{ sub.file_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px">View PDF</a>
+            {% else %}
+            <span class="badge badge-green">submitted in person</span>
+            {% endif %}
+          {% elif sub.file_url %}
+          <a href="{{ sub.file_url }}" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px">GitHub repo</a>
           {% endif %}
         </td>
         <td>

@@ -86,7 +86,7 @@ CREATE TABLE submissions (
     student_id       INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
     submission_type  VARCHAR(20) NOT NULL CHECK (submission_type IN ('assignment', 'project')),
     ref_id           INT NOT NULL,   -- assignment_id or project_id depending on type
-    file_url         TEXT,
+    file_url         TEXT, -- assignment PDF path or project GitHub repo URL
     submitted_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status           VARCHAR(20) DEFAULT 'submitted' CHECK (status IN ('submitted', 'late', 'resubmitted'))
 );
@@ -185,7 +185,7 @@ INSERT INTO submissions (student_id, submission_type, ref_id, file_url, status) 
 (1, 'assignment', 1, '/uploads/shaan_dijkstra.pdf', 'submitted'),
 (2, 'assignment', 1, '/uploads/asha_dijkstra.pdf',  'submitted'),
 (1, 'assignment', 3, '/uploads/shaan_norm.pdf',     'submitted'),
-(1, 'project',    1, '/uploads/shaan_tracker_v1.zip', 'submitted');
+(1, 'project',    1, 'https://github.com/shaan-dsouza/academic-task-tracker', 'submitted');
 
 -- Grades
 INSERT INTO grades (submission_id, faculty_id, marks_obtained, remarks) VALUES
@@ -294,4 +294,3 @@ WHERE pm.student_id = 1
   AND p.end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
 
 ORDER BY due_date;
-

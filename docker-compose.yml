@@ -24,9 +24,12 @@ services:
       DB_USER: postgres
       DB_PASSWORD: postgres
       SECRET_KEY: change-this-before-production
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
 
 volumes:
   postgres_data:
+  uploads_data:

@@ -54,7 +54,7 @@ def execute_returning(sql, params=()):
     row = cur.fetchone()
     conn.commit()
     conn.close()
-    return row[0] if row else None
+    return list(row.values())[0] if row else None
 
 def save_assignment_pdf(file_storage, student_id, assignment_id):
     filename = secure_filename(file_storage.filename or "")
@@ -721,6 +721,56 @@ def create_project():
         flash("Project created.", "success")
         return redirect(url_for("faculty_subjects"))
     return render_template("create_project.html", subjects=subjects)
+
+# ─── FACULTY: DELETE ASSIGNMENT ──────────────────────────────────────────────
+
+@app.route("/faculty/assignments/<int:aid>/delete", methods=["POST"])
+@login_required
+@role_required("faculty")
+def delete_assignment(aid):
+    """
+    Permanently deletes an assignment and all its submissions/grades.
+    Only the faculty who owns the parent subject can do this.
+    """
+    pid = session["profile_id"]
+    assignment = query("""
+        SELECT a.assignment_id, a.subject_id
+        FROM assignments a
+        JOIN subjects sub ON sub.subject_id = a.subject_id
+        WHERE a.assignment_id = %s AND sub.faculty_id = %s
+    """, (aid, pid), one=True)
+    if not assignment:
+        flash("Assignment not found or access denied.", "error")
+        return redirect(url_for("faculty_subjects"))
+    # Grades cascade from submissions; submissions cascade from assignment (ON DELETE CASCADE)
+    execute("DELETE FROM assignments WHERE assignment_id = %s", (aid,))
+    flash("Assignment deleted.", "success")
+    return redirect(url_for("faculty_subject_detail", sid=assignment["subject_id"]))
+
+# ─── FACULTY: DELETE PROJECT ──────────────────────────────────────────────────
+
+@app.route("/faculty/projects/<int:pid_proj>/delete", methods=["POST"])
+@login_required
+@role_required("faculty")
+def delete_project(pid_proj):
+    """
+    Permanently deletes a project and all its members, submissions, and grades.
+    Only the faculty who owns the parent subject can do this.
+    """
+    pid = session["profile_id"]
+    project = query("""
+        SELECT p.project_id, p.subject_id
+        FROM projects p
+        JOIN subjects sub ON sub.subject_id = p.subject_id
+        WHERE p.project_id = %s AND sub.faculty_id = %s
+    """, (pid_proj, pid), one=True)
+    if not project:
+        flash("Project not found or access denied.", "error")
+        return redirect(url_for("faculty_subjects"))
+    # project_members, submissions, grades all cascade from projects (ON DELETE CASCADE)
+    execute("DELETE FROM projects WHERE project_id = %s", (pid_proj,))
+    flash("Project deleted.", "success")
+    return redirect(url_for("faculty_subject_detail", sid=project["subject_id"]))
 
 # ─── FACULTY: GRADING ────────────────────────────────────────────────────────
 

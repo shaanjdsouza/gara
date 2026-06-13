@@ -7,6 +7,23 @@
 -- SECTION 1: SCHEMA CREATION (DDL)
 -- -------------------------------------------------------
 
+DROP TRIGGER IF EXISTS trg_late_submission ON submissions;
+DROP FUNCTION IF EXISTS fn_late_submission();
+
+DROP VIEW IF EXISTS ungraded_submissions;
+DROP VIEW IF EXISTS student_grade_summary;
+
+DROP TABLE IF EXISTS grades CASCADE;
+DROP TABLE IF EXISTS submissions CASCADE;
+DROP TABLE IF EXISTS project_members CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS assignments CASCADE;
+DROP TABLE IF EXISTS subject_enrollments CASCADE;
+DROP TABLE IF EXISTS subjects CASCADE;
+DROP TABLE IF EXISTS students CASCADE;
+DROP TABLE IF EXISTS faculty CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
 -- Users (shared base for students and faculty)
 CREATE TABLE users (
     user_id     SERIAL PRIMARY KEY,
@@ -101,6 +118,47 @@ CREATE TABLE grades (
     graded_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add between Section 1 and Section 2
+
+CREATE OR REPLACE VIEW student_grade_summary AS
+SELECT
+    s.student_id,
+    u.name        AS student_name,
+    sub.code,
+    sub.name      AS subject,
+    a.title       AS assignment_title,
+    a.max_marks,
+    g.marks_obtained,
+    g.remarks,
+    g.graded_at
+FROM submissions sm
+JOIN students s    ON s.student_id = sm.student_id
+JOIN users u       ON u.user_id = s.user_id
+JOIN grades g      ON g.submission_id = sm.submission_id
+JOIN assignments a ON a.assignment_id = sm.ref_id
+JOIN subjects sub  ON sub.subject_id = a.subject_id
+WHERE sm.submission_type = 'assignment';
+
+CREATE OR REPLACE VIEW ungraded_submissions AS
+SELECT
+    sm.submission_id,
+    sm.submission_type,
+    sm.ref_id,
+    sm.submitted_at,
+    sm.status,
+    u.name         AS student_name,
+    st.usn,
+    COALESCE(a.title, p.title) AS title,
+    sub.code       AS subject_code,
+    sub.faculty_id
+FROM submissions sm
+JOIN students st   ON st.student_id = sm.student_id
+JOIN users u       ON u.user_id = st.user_id
+LEFT JOIN assignments a ON a.assignment_id = sm.ref_id AND sm.submission_type = 'assignment'
+LEFT JOIN projects p    ON p.project_id = sm.ref_id    AND sm.submission_type = 'project'
+JOIN subjects sub  ON sub.subject_id = COALESCE(a.subject_id, p.subject_id)
+LEFT JOIN grades g ON g.submission_id = sm.submission_id
+WHERE g.grade_id IS NULL OR g.marks_obtained IS NULL;
 
 -- -------------------------------------------------------
 -- SECTION 2: INDEXES
@@ -294,3 +352,43 @@ WHERE pm.student_id = 1
   AND p.end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
 
 ORDER BY due_date;
+
+
+-- -----------------------------------------------------------------------
+-- SECTION 5 : TRIGGERS
+-- -----------------------------------------------------------------------
+
+-- 1. Late submissions
+
+CREATE OR REPLACE FUNCTION fn_late_submission()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_due TIMESTAMP;
+BEGIN
+    IF NEW.submission_type = 'assignment' THEN
+        SELECT (due_date::timestamp + interval '23:59:59')
+          INTO v_due
+        FROM assignments
+        WHERE assignment_id = NEW.ref_id;
+    ELSE
+        SELECT (end_date::timestamp + interval '23:59:59')
+          INTO v_due
+        FROM projects
+        WHERE project_id = NEW.ref_id;
+    END IF;
+
+    IF v_due IS NOT NULL
+       AND COALESCE(NEW.submitted_at, CURRENT_TIMESTAMP) > v_due THEN
+        NEW.status := 'late';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_late_submission
+BEFORE INSERT ON submissions
+FOR EACH ROW
+EXECUTE FUNCTION fn_late_submission();

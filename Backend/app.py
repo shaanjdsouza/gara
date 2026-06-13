@@ -8,11 +8,14 @@ from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash  # ← NEW: password hashing
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_ROOT = BASE_DIR / "uploads"
-ASSIGNMENT_UPLOAD_DIR = UPLOAD_ROOT / "assignments"
+ASSIGNMENT_UPLOAD_DIR  = UPLOAD_ROOT / "assignments"
+TEACHER_MATERIAL_DIR   = UPLOAD_ROOT / "materials"              # ← NEW: teacher PDF uploads
 ALLOWED_ASSIGNMENT_EXTENSIONS = {".pdf"}
+ALLOWED_MATERIAL_EXTENSIONS   = {".pdf"}                       # ← NEW
 
 app = Flask(__name__, template_folder=str(BASE_DIR / "Frontend"))
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
@@ -43,6 +46,16 @@ def execute(sql, params=()):
     conn.commit()
     conn.close()
 
+def execute_returning(sql, params=()):
+    """Like execute() but returns the first column of the first row (e.g. a new id)."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    row = cur.fetchone()
+    conn.commit()
+    conn.close()
+    return row[0] if row else None
+
 def save_assignment_pdf(file_storage, student_id, assignment_id):
     filename = secure_filename(file_storage.filename or "")
     ext = Path(filename).suffix.lower()
@@ -52,6 +65,18 @@ def save_assignment_pdf(file_storage, student_id, assignment_id):
     stored_name = f"assignment_{assignment_id}_student_{student_id}_{uuid4().hex}{ext}"
     file_storage.save(ASSIGNMENT_UPLOAD_DIR / stored_name)
     return url_for("uploaded_file", filename=f"assignments/{stored_name}")
+
+# ─── NEW: save teacher-uploaded material PDF ──────────────────────────────────
+def save_material_pdf(file_storage, assignment_id):
+    """Save a teacher-uploaded PDF material and return its serve URL."""
+    filename = secure_filename(file_storage.filename or "")
+    ext = Path(filename).suffix.lower()
+    if not filename or ext not in ALLOWED_MATERIAL_EXTENSIONS:
+        return None
+    TEACHER_MATERIAL_DIR.mkdir(parents=True, exist_ok=True)
+    stored_name = f"material_assignment_{assignment_id}_{uuid4().hex}{ext}"
+    file_storage.save(TEACHER_MATERIAL_DIR / stored_name)
+    return url_for("uploaded_file", filename=f"materials/{stored_name}")
 
 def is_github_repo_url(value):
     parsed = urlparse(value)
@@ -95,10 +120,15 @@ def login():
     if "user_id" in session:
         return redirect(url_for("dashboard"))
     if request.method == "POST":
-        email = request.form["email"].strip()
+        email    = request.form["email"].strip()
+        password = request.form["password"]                    # ← NEW: read password
         user = query("SELECT * FROM users WHERE email = %s", (email,), one=True)
         if not user:
             flash("No account found with that email.", "error")
+            return render_template("login.html")
+        # ← NEW: verify hashed password
+        if not check_password_hash(user["password_hash"], password):
+            flash("Incorrect password.", "error")
             return render_template("login.html")
         session["user_id"] = user["user_id"]
         session["name"]    = user["name"]
@@ -247,6 +277,7 @@ def assignments():
     rows = query("""
         SELECT a.assignment_id, a.title, a.description, a.due_date, a.max_marks,
                sub.name AS subject, sub.code,
+               a.material_url,
                s.submission_id, s.status, s.submitted_at, s.file_url,
                g.marks_obtained, g.remarks,
                CASE
@@ -280,7 +311,6 @@ def assignments():
 @role_required("student")
 def submit_assignment(aid):
     pid      = session["profile_id"]
-    # Check if already submitted
     existing = query("""
         SELECT submission_id FROM submissions
         WHERE student_id = %s AND submission_type = 'assignment' AND ref_id = %s
@@ -305,6 +335,60 @@ def submit_assignment(aid):
         flash("Assignment submitted!" + (" (marked late)" if status == "late" else ""), "success")
     return redirect(url_for("assignments"))
 
+# ─── NEW: STUDENT — revoke their own submission ───────────────────────────────
+@app.route("/assignments/<int:aid>/revoke", methods=["POST"])
+@login_required
+@role_required("student")
+def revoke_assignment_submission(aid):
+    """
+    Allows a student to delete their own submitted assignment,
+    but only if it has not yet been graded.
+    """
+    pid = session["profile_id"]
+    submission = query("""
+        SELECT s.submission_id, g.marks_obtained
+        FROM submissions s
+        LEFT JOIN grades g ON g.submission_id = s.submission_id
+        WHERE s.student_id = %s AND s.submission_type = 'assignment' AND s.ref_id = %s
+    """, (pid, aid), one=True)
+    if not submission:
+        flash("No submission found to revoke.", "error")
+        return redirect(url_for("assignments"))
+    if submission["marks_obtained"] is not None:
+        flash("Your submission has already been graded and cannot be revoked.", "error")
+        return redirect(url_for("assignments"))
+    # Delete the grade row (if it exists with NULL marks) then the submission
+    execute("DELETE FROM grades WHERE submission_id = %s", (submission["submission_id"],))
+    execute("DELETE FROM submissions WHERE submission_id = %s", (submission["submission_id"],))
+    flash("Submission revoked. You can now re-submit.", "success")
+    return redirect(url_for("assignments"))
+
+@app.route("/projects/<int:pid_proj>/revoke", methods=["POST"])
+@login_required
+@role_required("student")
+def revoke_project_submission(pid_proj):
+    """
+    Allows a student to revoke their own project submission
+    if it has not yet been graded.
+    """
+    pid = session["profile_id"]
+    submission = query("""
+        SELECT s.submission_id, g.marks_obtained
+        FROM submissions s
+        LEFT JOIN grades g ON g.submission_id = s.submission_id
+        WHERE s.student_id = %s AND s.submission_type = 'project' AND s.ref_id = %s
+    """, (pid, pid_proj), one=True)
+    if not submission:
+        flash("No submission found to revoke.", "error")
+        return redirect(url_for("projects"))
+    if submission["marks_obtained"] is not None:
+        flash("Your submission has already been graded and cannot be revoked.", "error")
+        return redirect(url_for("projects"))
+    execute("DELETE FROM grades WHERE submission_id = %s", (submission["submission_id"],))
+    execute("DELETE FROM submissions WHERE submission_id = %s", (submission["submission_id"],))
+    flash("Project submission revoked. You can now re-submit.", "success")
+    return redirect(url_for("projects"))
+
 # ─── STUDENT: PROJECTS ───────────────────────────────────────────────────────
 
 @app.route("/projects")
@@ -325,7 +409,6 @@ def projects():
         LEFT JOIN grades g ON g.submission_id = s.submission_id
         ORDER BY p.end_date
     """, (pid, pid))
-    # For each project, get team members
     projects_with_teams = []
     for p in rows:
         members = query("""
@@ -344,7 +427,7 @@ def projects():
 @login_required
 @role_required("student")
 def submit_project(pid_proj):
-    pid      = session["profile_id"]
+    pid        = session["profile_id"]
     github_url = request.form.get("github_url", "").strip()
     if not is_github_repo_url(github_url):
         flash("Please submit a valid GitHub repository URL.", "error")
@@ -421,8 +504,7 @@ def faculty_subject_detail(sid):
     pid = session["profile_id"]
     subject = query(
         "SELECT * FROM subjects WHERE subject_id = %s AND faculty_id = %s",
-        (sid, pid),
-        one=True,
+        (sid, pid), one=True,
     )
     if not subject:
         flash("Subject not found or access denied.", "error")
@@ -449,7 +531,7 @@ def faculty_subject_detail(sid):
         GROUP BY p.project_id
         ORDER BY p.end_date
     """, (sid,))
-    students    = query("""
+    students = query("""
         SELECT st.student_id, u.name, st.usn
         FROM subject_enrollments se
         JOIN students st ON st.student_id = se.student_id
@@ -472,6 +554,7 @@ def faculty_subject_detail(sid):
     submissions = query("""
         SELECT s.submission_id, s.submission_type, s.ref_id, s.file_url,
                s.status, s.submitted_at, u.name AS student_name, st.usn,
+               st.student_id,
                g.marks_obtained, g.remarks, g.graded_at,
                COALESCE(a.title, p.title) AS title, a.max_marks
         FROM submissions s
@@ -498,15 +581,89 @@ def create_assignment():
     pid = session["profile_id"]
     subjects = query("SELECT * FROM subjects WHERE faculty_id = %s", (pid,))
     if request.method == "POST":
-        execute("""
+        # Insert assignment first to get its id
+        new_id = execute_returning("""
             INSERT INTO assignments (subject_id, title, description, due_date, max_marks)
             VALUES (%s, %s, %s, %s, %s)
+            RETURNING assignment_id
         """, (request.form["subject_id"], request.form["title"],
               request.form["description"], request.form["due_date"],
               request.form["max_marks"]))
+        # ← NEW: optionally save attached material PDF
+        material_file = request.files.get("material_pdf")
+        if material_file and material_file.filename:
+            material_url = save_material_pdf(material_file, new_id)
+            if material_url:
+                execute("UPDATE assignments SET material_url = %s WHERE assignment_id = %s",
+                        (material_url, new_id))
+            else:
+                flash("Material must be a PDF file — assignment created without it.", "warning")
         flash("Assignment created.", "success")
         return redirect(url_for("faculty_subjects"))
     return render_template("create_assignment.html", subjects=subjects)
+
+# ─── NEW: FACULTY — upload / replace material PDF for an existing assignment ──
+@app.route("/faculty/assignments/<int:aid>/upload-material", methods=["POST"])
+@login_required
+@role_required("faculty")
+def upload_assignment_material(aid):
+    """
+    Lets a teacher upload (or replace) the reference PDF attached to an assignment.
+    Ownership is verified via faculty_id on the parent subject.
+    """
+    pid = session["profile_id"]
+    assignment = query("""
+        SELECT a.assignment_id, a.subject_id
+        FROM assignments a
+        JOIN subjects sub ON sub.subject_id = a.subject_id
+        WHERE a.assignment_id = %s AND sub.faculty_id = %s
+    """, (aid, pid), one=True)
+    if not assignment:
+        flash("Assignment not found or access denied.", "error")
+        return redirect(url_for("faculty_subjects"))
+
+    material_file = request.files.get("material_pdf")
+    if not material_file or not material_file.filename:
+        flash("Please choose a PDF file to upload.", "error")
+        return redirect(url_for("faculty_subject_detail", sid=assignment["subject_id"]))
+
+    material_url = save_material_pdf(material_file, aid)
+    if not material_url:
+        flash("Only PDF files are accepted.", "error")
+        return redirect(url_for("faculty_subject_detail", sid=assignment["subject_id"]))
+
+    execute("UPDATE assignments SET material_url = %s WHERE assignment_id = %s",
+            (material_url, aid))
+    flash("Material PDF uploaded successfully.", "success")
+    return redirect(url_for("faculty_subject_detail", sid=assignment["subject_id"]))
+
+# ─── NEW: FACULTY — delete a student's submission ────────────────────────────
+@app.route("/faculty/submissions/<int:sub_id>/delete", methods=["POST"])
+@login_required
+@role_required("faculty")
+def faculty_delete_submission(sub_id):
+    """
+    Allows a teacher to permanently remove a student's submission
+    (and its grade, if any). Only submissions belonging to the
+    teacher's own subjects can be deleted.
+    """
+    pid = session["profile_id"]
+    submission = query("""
+        SELECT s.submission_id, COALESCE(a.subject_id, p.subject_id) AS subject_id
+        FROM submissions s
+        LEFT JOIN assignments a ON a.assignment_id = s.ref_id AND s.submission_type = 'assignment'
+        LEFT JOIN projects p    ON p.project_id    = s.ref_id AND s.submission_type = 'project'
+        JOIN subjects sub ON sub.subject_id = COALESCE(a.subject_id, p.subject_id)
+        WHERE s.submission_id = %s AND sub.faculty_id = %s
+    """, (sub_id, pid), one=True)
+    if not submission:
+        flash("Submission not found or access denied.", "error")
+        return redirect(url_for("dashboard"))
+    # Cascade in DB handles grades, but we delete explicitly for clarity
+    execute("DELETE FROM grades WHERE submission_id = %s",      (sub_id,))
+    execute("DELETE FROM submissions WHERE submission_id = %s", (sub_id,))
+    flash("Submission removed successfully.", "success")
+    return redirect(url_for("faculty_subject_detail", sid=submission["subject_id"]))
 
 @app.route("/faculty/assignments/<int:aid>/mark-in-person", methods=["POST"])
 @login_required
@@ -592,14 +749,14 @@ def grade_submission(sub_id):
     if request.method == "POST":
         marks   = request.form["marks_obtained"]
         remarks = request.form.get("remarks", "")
-        status = request.form.get("status", submission["status"])
+        status  = request.form.get("status", submission["status"])
         if status not in {"submitted", "late", "resubmitted"}:
             status = submission["status"]
         file_url = submission["file_url"] or ""
         if submission["submission_type"] == "assignment":
             if request.form.get("submitted_in_person"):
                 file_url = ""
-                status = "submitted"
+                status   = "submitted"
             else:
                 submission_file = request.files.get("submission_file")
                 if submission_file and submission_file.filename:

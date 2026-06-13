@@ -49,7 +49,8 @@
       color: var(--muted);
       margin-bottom: 6px;
     }
-    input[type="email"] {
+    input[type="email"],
+    input[type="password"] {
       width: 100%;
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -61,7 +62,8 @@
       outline: none;
       transition: border-color 0.15s;
     }
-    input[type="email"]:focus { border-color: var(--accent); }
+    input[type="email"]:focus,
+    input[type="password"]:focus { border-color: var(--accent); }
     .btn-login {
       width: 100%;
       background: var(--accent);
@@ -119,6 +121,11 @@
         <label for="email">College email address</label>
         <input type="email" id="email" name="email"
                placeholder="yourname@sjec.ac.in" autofocus required>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password"
+               placeholder="Enter your password" required>
       </div>
       <button type="submit" class="btn-login">Sign in</button>
     </form>
